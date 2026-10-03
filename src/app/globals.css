@@ -917,6 +917,165 @@ a {
   margin-bottom: 8px;
 }
 
+.overview-page {
+  display: grid;
+  gap: 19px;
+}
+
+.overview-stats {
+  margin-bottom: 0;
+}
+
+.overview-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 15px;
+}
+
+.overview-panel {
+  min-width: 0;
+}
+
+.overview-panel .section-heading {
+  min-height: 70px;
+  gap: 10px;
+}
+
+.overview-panel .section-heading h2 {
+  font-size: 13px;
+}
+
+.overview-panel .section-heading > .details-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.overview-list {
+  min-height: 220px;
+  border-top: 1px solid var(--line);
+}
+
+.overview-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  color: #89958e;
+  font-size: 11px;
+}
+
+.overview-user-row,
+.overview-voucher-row {
+  display: flex;
+  min-height: 66px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f2f0;
+}
+
+.overview-user-row:last-child,
+.overview-voucher-row:last-child {
+  border-bottom: 0;
+}
+
+.overview-user-row .user-cell {
+  min-width: 0;
+}
+
+.overview-user-row .user-cell > div:last-child,
+.overview-voucher-info {
+  min-width: 0;
+}
+
+.overview-user-row .user-cell strong,
+.overview-user-row .user-cell span,
+.overview-voucher-info strong,
+.overview-voucher-info span {
+  overflow: hidden;
+  max-width: 190px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-user-metrics {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 4px;
+  color: #7f8b83;
+  font-size: 9px;
+}
+
+.overview-user-metrics strong {
+  color: #37744f;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.overview-user-metrics strong span {
+  color: #87928b;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.overview-voucher-row {
+  justify-content: flex-start;
+}
+
+.overview-voucher-row .voucher-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.overview-voucher-info {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+}
+
+.overview-voucher-info strong {
+  color: #344139;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.overview-voucher-info span {
+  color: #89958e;
+  font-size: 9px;
+}
+
+.overview-voucher-row .status-pill {
+  flex: 0 0 auto;
+}
+
+.overview-panel-footer {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px;
+  border-top: 1px solid var(--line);
+  color: #89958e;
+  font-size: 9px;
+}
+
+.overview-panel-footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .users-table {
   min-width: 760px;
 }
@@ -1586,6 +1745,10 @@ td {
 
   .stats-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .overview-panels {
+    grid-template-columns: 1fr;
   }
 
   .stat-highlight {

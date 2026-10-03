@@ -243,7 +243,7 @@ export default function Home() {
   const [user, setUser] = useState<ApiRecord | null>(null);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [activeSection, setActiveSection] = useState<"vouchers" | "users">("vouchers");
+  const [activeSection, setActiveSection] = useState<"overview" | "vouchers" | "users">("overview");
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -266,13 +266,16 @@ export default function Home() {
     setLoadingVouchers(true);
     setDashboardError("");
     try {
-      const [profileResponse, voucherResponse] = await Promise.all([
+      const [profileResponse, voucherResponse, usersResponse] = await Promise.all([
         apiRequest("/me", authToken),
         apiRequest("/admin/vouchers", authToken),
+        apiRequest("/admin/users", authToken),
       ]);
       const profile = asRecord(profileResponse);
       setUser(asRecord(profile.data ?? profile.user ?? profile));
       setVouchers(normalizeVouchers(voucherResponse));
+      setUsers(normalizeUsers(usersResponse));
+      setUsersLoaded(true);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Tidak dapat memuat dashboard.";
@@ -347,6 +350,16 @@ export default function Home() {
   const activeCount = vouchers.filter(
     (voucher) => voucher.isActive,
   ).length;
+  const totalRedemptions = users.reduce(
+    (total, item) => total + item.redeemedVoucherCount,
+    0,
+  );
+  const totalScore = users.reduce(
+    (total, item) => total + (Number(item.scoreTotal) || 0),
+    0,
+  );
+  const overviewVouchers = vouchers.slice(0, 5);
+  const recentUsers = users.slice(0, 5);
 
   const filteredUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
@@ -368,6 +381,11 @@ export default function Home() {
 
   function showVouchers() {
     setActiveSection("vouchers");
+    setDashboardError("");
+  }
+
+  function showOverview() {
+    setActiveSection("overview");
     setDashboardError("");
   }
 
@@ -591,6 +609,9 @@ export default function Home() {
         </a>
         <div className="sidebar-section-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Navigasi utama">
+          <button className={`nav-item ${activeSection === "overview" ? "active" : ""}`} type="button" onClick={showOverview} aria-label="Overview">
+            <Icon name="grid" size={18} /> Overview
+          </button>
           <button className={`nav-item ${activeSection === "vouchers" ? "active" : ""}`} type="button" onClick={showVouchers} aria-label="Voucher">
             <Icon name="ticket" size={18} /> Voucher <span className="nav-count">{vouchers.length}</span>
           </button>
@@ -615,7 +636,7 @@ export default function Home() {
 
       <section className="dashboard-main" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection === "users" ? "Pengguna" : "Voucher"}</strong></div>
+          <div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection === "overview" ? "Overview" : activeSection === "users" ? "Pengguna" : "Voucher"}</strong></div>
           <div className="topbar-actions">
             <span className="topbar-date">{new Intl.DateTimeFormat("id-ID", { dateStyle: "full" }).format(new Date())}</span>
             <button className="icon-button notification-button" type="button" aria-label="Notifikasi"><Icon name="bell" size={19} /><i /></button>
@@ -627,10 +648,10 @@ export default function Home() {
           <div className="page-heading">
             <div>
               <span className="eyebrow"><span className="eyebrow-dot" /> PANEL ADMINISTRATOR</span>
-              <h1>{activeSection === "users" ? "Pengguna" : "Voucher"}</h1>
-              <p>{activeSection === "users" ? "Lihat akun, skor, dan riwayat penukaran voucher." : "Kelola promo dan hadiah untuk komunitas game-mu."}</p>
+              <h1>{activeSection === "overview" ? "Dashboard" : activeSection === "users" ? "Pengguna" : "Voucher"}</h1>
+              <p>{activeSection === "overview" ? "Ringkasan aktivitas pengguna dan voucher di platform." : activeSection === "users" ? "Lihat akun, skor, dan riwayat penukaran voucher." : "Kelola promo dan hadiah untuk komunitas game-mu."}</p>
             </div>
-            {activeSection === "vouchers" && (
+            {activeSection !== "users" && (
               <button className="button button-primary create-button" onClick={openCreateModal} type="button">
                 <Icon name="plus" size={18} /> Buat voucher
               </button>
@@ -644,7 +665,81 @@ export default function Home() {
             </div>
           )}
 
-          {activeSection === "users" ? (
+          {activeSection === "overview" ? (
+            <section className="overview-page">
+              <section className="stats-grid overview-stats" aria-label="Ringkasan platform">
+                <article className="stat-card">
+                  <div className="stat-top"><span>Total pengguna</span><span className="stat-icon purple"><Icon name="users" size={19} /></span></div>
+                  <div className="stat-value">{users.length.toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">{totalScore.toLocaleString("id-ID")} total skor</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-top"><span>Total voucher</span><span className="stat-icon green"><Icon name="ticket" size={19} /></span></div>
+                  <div className="stat-value">{vouchers.length.toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">{activeCount.toLocaleString("id-ID")} voucher aktif</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-top"><span>Total penukaran</span><span className="stat-icon orange"><Icon name="spark" size={18} /></span></div>
+                  <div className="stat-value">{totalRedemptions.toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">Voucher yang telah ditukar</div>
+                </article>
+              </section>
+
+              <div className="overview-panels">
+                <section className="voucher-section overview-panel">
+                  <div className="section-heading">
+                    <div><h2>Pengguna terbaru <span>{users.length}</span></h2><p>Skor dan aktivitas pengguna terbaru.</p></div>
+                    <button className="details-button" type="button" onClick={() => void showUsers()}>Semua pengguna</button>
+                  </div>
+                  <div className="overview-list">
+                    {loadingUsers ? (
+                      <div className="overview-empty"><span className="inline-loader" /> Memuat pengguna...</div>
+                    ) : recentUsers.length === 0 ? (
+                      <div className="overview-empty">Belum ada data pengguna.</div>
+                    ) : recentUsers.map((item) => (
+                      <div className="overview-user-row" key={item.id}>
+                        <div className="user-cell">
+                          <div className="avatar">{item.name.slice(0, 1).toUpperCase()}</div>
+                          <div><strong>{item.name}</strong><span>{item.email || "Email tidak tersedia"}</span></div>
+                        </div>
+                        <div className="overview-user-metrics">
+                          <strong>{Number(item.scoreTotal).toLocaleString("id-ID")} <span>skor</span></strong>
+                          <span>{item.redeemedVoucherCount.toLocaleString("id-ID")} ditukar</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="voucher-section overview-panel">
+                  <div className="section-heading">
+                    <div><h2>Voucher <span>{vouchers.length}</span></h2><p>Voucher aktif dan nilai poinnya.</p></div>
+                    <button className="details-button" type="button" onClick={showVouchers}>Kelola voucher</button>
+                  </div>
+                  <div className="overview-list">
+                    {loadingVouchers ? (
+                      <div className="overview-empty"><span className="inline-loader" /> Memuat voucher...</div>
+                    ) : overviewVouchers.length === 0 ? (
+                      <div className="overview-empty">Belum ada voucher terdaftar.</div>
+                    ) : overviewVouchers.map((voucher) => (
+                      <div className="overview-voucher-row" key={voucher.id}>
+                        <div className="voucher-icon"><Icon name="ticket" size={17} /></div>
+                        <div className="overview-voucher-info">
+                          <strong>{voucher.title}</strong>
+                          <span>{voucher.code || "Tanpa kode"} · {Number(voucher.pointsCost).toLocaleString("id-ID")} poin</span>
+                        </div>
+                        <span className={`status-pill ${voucher.isActive ? "is-active" : "is-inactive"}`}>{voucher.isActive ? "Aktif" : "Nonaktif"}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="overview-panel-footer">
+                    <span>{activeCount.toLocaleString("id-ID")} dari {vouchers.length.toLocaleString("id-ID")} voucher aktif</span>
+                    <button type="button" onClick={showVouchers}>Lihat semua <Icon name="arrow" size={14} /></button>
+                  </div>
+                </section>
+              </div>
+            </section>
+          ) : activeSection === "users" ? (
             <>
               <section className="stats-grid user-stats" aria-label="Ringkasan pengguna">
                 <article className="stat-card">

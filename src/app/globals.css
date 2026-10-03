@@ -651,9 +651,15 @@ a {
   width: calc(100% - 248px);
   min-height: 100vh;
   margin-left: 248px;
+  padding-top: 70px;
 }
 
 .topbar {
+  position: fixed;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 248px;
   display: flex;
   height: 70px;
   align-items: center;
@@ -661,6 +667,7 @@ a {
   padding: 0 clamp(24px, 4vw, 58px);
   border-bottom: 1px solid var(--line);
   background: #fff;
+  box-shadow: 0 3px 12px rgba(25, 49, 34, 0.035);
 }
 
 .breadcrumb {
@@ -1630,6 +1637,10 @@ td {
     margin-left: 220px;
   }
 
+  .topbar {
+    left: 220px;
+  }
+
   .dashboard-content {
     padding-right: 27px;
     padding-left: 27px;
@@ -1741,6 +1752,10 @@ td {
   .dashboard-main {
     width: calc(100% - 70px);
     margin-left: 70px;
+  }
+
+  .topbar {
+    left: 70px;
   }
 
   .stats-grid {
@@ -1855,9 +1870,12 @@ td {
   .dashboard-main {
     width: 100%;
     margin: 0;
+    padding-top: 58px;
   }
 
   .topbar {
+    right: 0;
+    left: 0;
     height: 58px;
     padding: 0 19px;
   }

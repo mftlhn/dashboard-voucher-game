@@ -10,6 +10,9 @@ function isSupportedRequest(path: string[], method: string) {
   if (path.length === 2 && path[0] === "admin" && path[1] === "vouchers") {
     return method === "GET" || method === "POST";
   }
+  if (path.length === 2 && path[0] === "admin" && path[1] === "users") {
+    return method === "GET";
+  }
   if (
     path.length === 3 &&
     path[0] === "admin" &&

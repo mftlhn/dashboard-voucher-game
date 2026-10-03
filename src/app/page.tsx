@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 const API_URL = "/api";
 const TOKEN_KEY = "voucher-dashboard-token";
@@ -18,6 +18,27 @@ type Voucher = {
 };
 
 type VoucherForm = Omit<Voucher, "id">;
+
+type RedeemedVoucher = {
+  redemptionId: string;
+  voucherId: string;
+  code: string;
+  title: string;
+  valueAmount: string;
+  pointsSpent: string;
+  redeemedAt: string;
+};
+
+type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  scoreTotal: string;
+  redeemedVoucherCount: number;
+  redeemedVouchers: RedeemedVoucher[];
+};
 
 const emptyForm: VoucherForm = {
   code: "",
@@ -121,6 +142,57 @@ function normalizeVouchers(response: unknown): Voucher[] {
   return items.map(normalizeVoucher);
 }
 
+function normalizeRedeemedVoucher(value: unknown, index: number): RedeemedVoucher {
+  const item = asRecord(value);
+  return {
+    redemptionId: valueOf(item, ["redemption_id", "redemptionId"], String(index)),
+    voucherId: valueOf(item, ["voucher_id", "voucherId"]),
+    code: valueOf(item, ["code"]),
+    title: valueOf(item, ["title"], "Voucher"),
+    valueAmount: valueOf(item, ["value_amount", "valueAmount"]),
+    pointsSpent: valueOf(item, ["points_spent", "pointsSpent"]),
+    redeemedAt: valueOf(item, ["redeemed_at", "redeemedAt"]),
+  };
+}
+
+function normalizeUsers(response: unknown): AdminUser[] {
+  const root = asRecord(response);
+  if (!Array.isArray(root.users)) {
+    throw new Error("Format data pengguna dari server tidak dikenali.");
+  }
+
+  return root.users.map((value, index) => {
+    const item = asRecord(value);
+    const redemptions = Array.isArray(item.redeemed_vouchers)
+      ? item.redeemed_vouchers
+      : Array.isArray(item.redeemedVouchers)
+        ? item.redeemedVouchers
+        : [];
+    const redeemedVoucherCount = Number(
+      item.redeemed_voucher_count ?? item.redeemedVoucherCount ?? redemptions.length,
+    );
+    return {
+      id: valueOf(item, ["id"], String(index)),
+      name: valueOf(item, ["name"], "Tanpa nama"),
+      email: valueOf(item, ["email"]),
+      role: valueOf(item, ["role"], "user"),
+      createdAt: valueOf(item, ["created_at", "createdAt"]),
+      scoreTotal: valueOf(item, ["score_total", "scoreTotal"], "0"),
+      redeemedVoucherCount: Number.isFinite(redeemedVoucherCount)
+        ? redeemedVoucherCount
+        : redemptions.length,
+      redeemedVouchers: redemptions.map(normalizeRedeemedVoucher),
+    };
+  });
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return value && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
+}
+
 function displayName(user: ApiRecord | null) {
   return user
     ? valueOf(user, ["name", "fullName", "username", "email"], "Admin")
@@ -131,12 +203,13 @@ function Icon({
   name,
   size = 20,
 }: {
-  name: "grid" | "ticket" | "plus" | "search" | "bell" | "logout" | "edit" | "close" | "arrow" | "spark" | "menu";
+  name: "grid" | "ticket" | "users" | "plus" | "search" | "bell" | "logout" | "edit" | "close" | "arrow" | "spark" | "menu";
   size?: number;
 }) {
   const paths: Record<typeof name, React.ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /></>,
     ticket: <><path d="M3 8a2 2 0 0 0 0 4v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4a2 2 0 0 1 0-4V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z" /><path d="M13 5v2m0 4v2m0 4v2" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
@@ -169,6 +242,12 @@ export default function Home() {
   const [token, setToken] = useState("");
   const [user, setUser] = useState<ApiRecord | null>(null);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [activeSection, setActiveSection] = useState<"vouchers" | "users">("vouchers");
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [loadingVouchers, setLoadingVouchers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -210,6 +289,28 @@ export default function Home() {
     }
   }, []);
 
+  const loadUsers = useCallback(async (authToken: string) => {
+    setLoadingUsers(true);
+    setDashboardError("");
+    try {
+      const response = await apiRequest("/admin/users", authToken);
+      setUsers(normalizeUsers(response));
+      setUsersLoaded(true);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Tidak dapat memuat daftar pengguna.";
+      setDashboardError(message);
+      if (message.includes("(401)") || message.toLowerCase().includes("unauthorized")) {
+        localStorage.removeItem(TOKEN_KEY);
+        setToken("");
+        setUser(null);
+      }
+      throw error;
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const savedToken = localStorage.getItem(TOKEN_KEY);
@@ -246,6 +347,29 @@ export default function Home() {
   const activeCount = vouchers.filter(
     (voucher) => voucher.isActive,
   ).length;
+
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    return users.filter(
+      (item) =>
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.email.toLowerCase().includes(query) ||
+        item.role.toLowerCase().includes(query),
+    );
+  }, [userSearch, users]);
+
+  async function showUsers() {
+    setActiveSection("users");
+    if (token && !usersLoaded) {
+      await loadUsers(token).catch(() => undefined);
+    }
+  }
+
+  function showVouchers() {
+    setActiveSection("vouchers");
+    setDashboardError("");
+  }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -366,6 +490,9 @@ export default function Home() {
     setToken("");
     setUser(null);
     setVouchers([]);
+    setUsers([]);
+    setUsersLoaded(false);
+    setActiveSection("vouchers");
     setDashboardError("");
     setNotice("");
   }
@@ -464,8 +591,12 @@ export default function Home() {
         </a>
         <div className="sidebar-section-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Navigasi utama">
-          <a className="nav-item" href="#overview"><Icon name="grid" size={18} /> Overview</a>
-          <a className="nav-item active" href="#vouchers"><Icon name="ticket" size={18} /> Voucher <span className="nav-count">{vouchers.length}</span></a>
+          <button className={`nav-item ${activeSection === "vouchers" ? "active" : ""}`} type="button" onClick={showVouchers} aria-label="Voucher">
+            <Icon name="ticket" size={18} /> Voucher <span className="nav-count">{vouchers.length}</span>
+          </button>
+          <button className={`nav-item ${activeSection === "users" ? "active" : ""}`} type="button" onClick={() => void showUsers()} aria-label="Pengguna">
+            <Icon name="users" size={18} /> Pengguna <span className="nav-count">{users.length}</span>
+          </button>
         </nav>
         <div className="sidebar-bottom">
           {/* <div className="sidebar-help">
@@ -484,7 +615,7 @@ export default function Home() {
 
       <section className="dashboard-main" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> <strong>Voucher</strong></div>
+          <div className="breadcrumb">Workspace <span>/</span> <strong>{activeSection === "users" ? "Pengguna" : "Voucher"}</strong></div>
           <div className="topbar-actions">
             <span className="topbar-date">{new Intl.DateTimeFormat("id-ID", { dateStyle: "full" }).format(new Date())}</span>
             <button className="icon-button notification-button" type="button" aria-label="Notifikasi"><Icon name="bell" size={19} /><i /></button>
@@ -496,12 +627,14 @@ export default function Home() {
           <div className="page-heading">
             <div>
               <span className="eyebrow"><span className="eyebrow-dot" /> PANEL ADMINISTRATOR</span>
-              <h1>Voucher</h1>
-              <p>Kelola promo dan hadiah untuk komunitas game-mu.</p>
+              <h1>{activeSection === "users" ? "Pengguna" : "Voucher"}</h1>
+              <p>{activeSection === "users" ? "Lihat akun, skor, dan riwayat penukaran voucher." : "Kelola promo dan hadiah untuk komunitas game-mu."}</p>
             </div>
-            <button className="button button-primary create-button" onClick={openCreateModal} type="button">
-              <Icon name="plus" size={18} /> Buat voucher
-            </button>
+            {activeSection === "vouchers" && (
+              <button className="button button-primary create-button" onClick={openCreateModal} type="button">
+                <Icon name="plus" size={18} /> Buat voucher
+              </button>
+            )}
           </div>
 
           {(dashboardError || notice) && (
@@ -511,6 +644,83 @@ export default function Home() {
             </div>
           )}
 
+          {activeSection === "users" ? (
+            <>
+              <section className="stats-grid user-stats" aria-label="Ringkasan pengguna">
+                <article className="stat-card">
+                  <div className="stat-top"><span>Total pengguna</span><span className="stat-icon purple"><Icon name="users" size={19} /></span></div>
+                  <div className="stat-value">{users.length.toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">Akun terdaftar</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-top"><span>Total skor</span><span className="stat-icon green"><Icon name="spark" size={18} /></span></div>
+                  <div className="stat-value">{users.reduce((total, item) => total + (Number(item.scoreTotal) || 0), 0).toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">Skor seluruh pengguna</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-top"><span>Voucher ditukar</span><span className="stat-icon green"><Icon name="ticket" size={18} /></span></div>
+                  <div className="stat-value">{users.reduce((total, item) => total + item.redeemedVoucherCount, 0).toLocaleString("id-ID")}</div>
+                  <div className="stat-caption">Total penukaran</div>
+                </article>
+              </section>
+              <section className="voucher-section users-section" id="users">
+                <div className="section-heading">
+                  <div><h2>Semua pengguna <span>{users.length}</span></h2><p>Akun dan aktivitas penukaran voucher pengguna.</p></div>
+                </div>
+                <div className="table-toolbar">
+                  <div className="search-box"><Icon name="search" size={18} /><input type="search" placeholder="Cari nama, email, atau role..." value={userSearch} onChange={(event) => setUserSearch(event.target.value)} aria-label="Cari pengguna" /></div>
+                </div>
+                <div className="table-wrap">
+                  <table className="users-table">
+                    <thead><tr><th>PENGGUNA</th><th>ROLE</th><th>SKOR</th><th>DITUKAR</th><th>TERDAFTAR</th><th><span className="sr-only">Detail</span></th></tr></thead>
+                    <tbody>
+                      {loadingUsers ? (
+                        <tr><td colSpan={6} className="table-message"><span className="inline-loader" /> Memuat pengguna...</td></tr>
+                      ) : filteredUsers.length === 0 ? (
+                        <tr><td colSpan={6} className="table-message">{users.length ? "Tidak ada pengguna yang cocok dengan pencarian." : "Belum ada data pengguna."}</td></tr>
+                      ) : filteredUsers.map((item) => (
+                        <Fragment key={item.id}>
+                          <tr>
+                            <td><div className="user-cell"><div className="avatar">{item.name.slice(0, 1).toUpperCase()}</div><div><strong>{item.name}</strong><span>{item.email || "Email tidak tersedia"}</span></div></div></td>
+                            <td><span className={`role-pill ${item.role.toLowerCase() === "admin" ? "role-admin" : ""}`}>{item.role}</span></td>
+                            <td className="user-score">{Number(item.scoreTotal).toLocaleString("id-ID")}</td>
+                            <td>{item.redeemedVoucherCount.toLocaleString("id-ID")} voucher</td>
+                            <td>{formatDate(item.createdAt)}</td>
+                            <td><button className="details-button" type="button" onClick={() => setExpandedUserId(expandedUserId === item.id ? null : item.id)} aria-expanded={expandedUserId === item.id}>{expandedUserId === item.id ? "Tutup" : "Detail"}</button></td>
+                          </tr>
+                          {expandedUserId === item.id && (
+                            <tr className="redemption-row" key={`${item.id}-redemptions`}>
+                              <td colSpan={6}>
+                                <div className="redemption-details">
+                                  <h3>Voucher ditukar oleh {item.name}</h3>
+                                  {item.redeemedVouchers.length === 0 ? (
+                                    <p className="empty-redemptions">Pengguna ini belum menukar voucher.</p>
+                                  ) : (
+                                    <div className="redemption-list">
+                                      {item.redeemedVouchers.map((redemption) => (
+                                        <div className="redemption-item" key={redemption.redemptionId}>
+                                          <div><strong>{redemption.title}</strong><span>{redemption.code || `Voucher #${redemption.voucherId}`}</span></div>
+                                          <span>Nilai Rp {Number(redemption.valueAmount).toLocaleString("id-ID")}</span>
+                                          <span>{Number(redemption.pointsSpent).toLocaleString("id-ID")} poin</span>
+                                          <span>{formatDate(redemption.redeemedAt)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-footer"><span>Menampilkan <strong>{filteredUsers.length}</strong> dari <strong>{users.length}</strong> pengguna</span><span>Data diperbarui langsung dari server</span></div>
+              </section>
+            </>
+          ) : (
+          <>
           <section className="stats-grid" aria-label="Ringkasan voucher">
             <article className="stat-card">
               <div className="stat-top"><span>Total voucher</span><span className="stat-icon purple"><Icon name="ticket" size={19} /></span></div>
@@ -563,6 +773,8 @@ export default function Home() {
             </div>
             <div className="table-footer"><span>Menampilkan <strong>{filteredVouchers.length}</strong> dari <strong>{vouchers.length}</strong> voucher</span><span>Data diperbarui langsung dari server</span></div>
           </section>
+          </>
+          )}
           <footer className="dashboard-footer"><span>© 2026 Playpass Admin</span><span>MAKE PLAY MORE REWARDING <i>✦</i></span></footer>
         </div>
       </section>
